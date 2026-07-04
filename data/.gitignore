@@ -1,0 +1,7 @@
+.env
+.DS_Store
+venv/
+Database/*
+data/input
+venv
+Database
