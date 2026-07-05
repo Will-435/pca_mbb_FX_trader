@@ -1,10 +1,8 @@
 """
-pca.py fits and freezes the covariance PCA that defines the regime axes.
+pca.py fits and eigenvectors the covariance PCA that defines the regime axes.
 
-It reads the weekly data from Data/Input/data_ingestion.py, 
-builds the feature matrix, fits the PCA on the fit window, 
-freezes it, and projects the full history onto the frozen axes. This
-file never touches the network.
+It reads from Data/Input/data_ingestion.py, builds the feature matrix, fits 
+the PCA on the window, and projects the full history onto the frozen axes.
 
 Outputs (pca_output/*):
 
@@ -13,11 +11,11 @@ Outputs (pca_output/*):
 
     pc_timeseries.png plots the PC score history.
 
-    rolling_correlations.parquet holds the separate correlation tracking. Every
-    artefact is also exported as a .sql script in Database/ for inspection in MySQL
-    Workbench.
+    rolling_correlations.parquet holds the separate correlation tracking. 
+    Exported as a .sql script to Database via utils/sql_conversion.py.
 """
 
+import sys
 from pathlib import Path
 
 import matplotlib
@@ -28,6 +26,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+# Running "python3 components/pca.py" only puts components/ on the import path,
+# not the repository root so utils/ is added here before its helper imports.
+# Although its complicated it's necessary.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from utils.sql_conversion import write_dataframe_to_sql
+
 
 RAW_DATA_DIRECTORY = Path("Data/Input")
 WEEKLY_LEVELS_PATH = RAW_DATA_DIRECTORY / "weekly_levels.parquet"
@@ -37,8 +42,6 @@ OUTPUT_DIRECTORY = Path("components/pca_output")
 PCA_MODEL_PATH = OUTPUT_DIRECTORY / "pca_model.parquet"
 ROLLING_CORRELATIONS_PATH = OUTPUT_DIRECTORY / "rolling_correlations.parquet"
 PC_TIMESERIES_PLOT_PATH = OUTPUT_DIRECTORY / "pc_timeseries.png"
-
-DATABASE_DIRECTORY = Path("Database")
 
 DATE_COLUMN_NAME = "week_date"
 TARGET_COLUMN_NAME = "usd_krw_forward_return_4w"
@@ -68,8 +71,6 @@ FIT_END_DATE = "2022-12-31"
 NUMBER_OF_COMPONENTS_RETAINED = 3
 
 FIRST_POSITION = 1
-
-INSERT_BATCH_ROW_COUNT = 500
 
 PLOT_WIDTH_INCHES = 12
 PLOT_HEIGHT_INCHES = 9
@@ -108,9 +109,8 @@ def load_weekly_level_frame():
 
 def build_weekly_feature_matrix(weekly_level_frame = None):
     """
-    Turns weekly levels into features and target. Price series
-    become four week log returns. Yields and the VIX become four week changes
-    in their own units. Units arent standardised to keep scale.
+    Turns weekly levels into 4-week features and targets (price series are log 
+    returns, all-else in their own units). Not standardising maintains scale.
 
     The target is the forward four week log return of USD/KRW. It sits beside
     the features but is never a PCA input.
@@ -161,9 +161,8 @@ def build_weekly_feature_matrix(weekly_level_frame = None):
 
 def fit_frozen_pca(feature_frame = None):
     """
-    Fits the covariance PCA on the fit window and freezes it. The frozen pieces
-    are the loadings, the feature means, the component variances and the fit
-    date range.
+    Fits the covariance PCA on the window. The frozen pieces are the loadings, 
+    the feature means, the component variances and the fit date range.
 
     The eigendecomposition of the fit window covariance matrix is the PCA. The
     eigenvectors with the largest eigenvalues are kept as components.
@@ -261,10 +260,10 @@ def build_model_export_frame(pca_model = None):
     This is needed for the C++ Euclidean file. This function is made by Claude.
 
     INPUTS:
-        * pca_model, the frozen model from fit_frozen_pca
+        * pca_model - the frozen model from fit_frozen_pca
 
     OUTPUTS:
-        * a dataframe ready for pca_model.parquet and the SQL export
+        * a df ready for pca_model.parquet and the SQL export
     """
     model_records = []
 
@@ -371,81 +370,9 @@ def compute_rolling_correlations(weekly_level_frame = None):
     return rolling_correlation_frame
 
 
-def format_value_for_sql(single_value = None):
-    """
-    Formats one Python value as a MySQL literal.
-
-    INPUTS:
-        * single_value - any cell value from a dataframe
-
-    OUTPUTS:
-        * values as strings
-    """
-    if pd.isna(single_value):
-        return "NULL"
-    if isinstance(single_value, pd.Timestamp):
-        return "'" + single_value.strftime("%Y-%m-%d") + "'"
-    if isinstance(single_value, (int, float, np.integer, np.floating)):
-        return str(single_value)
-    
-    return "'" + str(single_value).replace("'", "''") + "'"
-
-
-def write_dataframe_to_sql(dataframe = None, table_name = None, output_path = None):
-    """
-
-    Another function written by Claude, so that I can access the data easily 
-    using MySQLWorkbench.
-
-    Writes a dataframe as a MySQL script with one CREATE TABLE and batched
-    INSERT statements.
-
-    INPUTS:
-        * dataframe, the table content
-        * table_name, the table name used in the script
-        * output_path, where the .sql file is written
-
-    OUTPUTS:
-        * a .sql file at output_path
-    """
-    column_definitions = []
-    for column_name in dataframe.columns:
-        if pd.api.types.is_datetime64_any_dtype(dataframe[column_name]):
-            column_type = "DATE"
-        elif pd.api.types.is_numeric_dtype(dataframe[column_name]):
-            column_type = "DOUBLE"
-        else:
-            column_type = "VARCHAR(255)"
-        column_definitions.append("    " + column_name + " " + column_type)
-
-    script_lines = []
-    script_lines.append("DROP TABLE IF EXISTS " + table_name + ";")
-    script_lines.append("CREATE TABLE " + table_name + " (")
-    script_lines.append(",\n".join(column_definitions))
-    script_lines.append(");")
-
-    formatted_rows = []
-    for row_values in dataframe.itertuples(index = False):
-        formatted_cells = []
-        for single_value in row_values:
-            formatted_cells.append(format_value_for_sql(single_value = single_value))
-        formatted_rows.append("(" + ", ".join(formatted_cells) + ")")
-
-    # Rows are inserted in batches, one giant statement would be unreadable and
-    # one statement per row would import slowly.
-    for batch_start in range(0, len(formatted_rows), INSERT_BATCH_ROW_COUNT):
-        batch_rows = formatted_rows[batch_start:batch_start + INSERT_BATCH_ROW_COUNT]
-        script_lines.append("INSERT INTO " + table_name + " VALUES")
-        script_lines.append(",\n".join(batch_rows) + ";")
-
-    output_path.write_text("\n".join(script_lines) + "\n")
-    print("Written " + str(output_path))
-
-
 def main():
     """
-    Runs the full PCA stage: load, feature build, frozen fit, projection,
-    plots and exports. 
+    The main file. Load, feature build, frozen fit, projection, plot. 
 
     INPUTS:
         * none
@@ -491,22 +418,18 @@ def main():
     write_dataframe_to_sql(
         dataframe = feature_matrix_frame.reset_index(),
         table_name = "feature_matrix",
-        output_path = DATABASE_DIRECTORY / "feature_matrix.sql",
     )
     write_dataframe_to_sql(
         dataframe = model_export_frame,
         table_name = "pca_model",
-        output_path = DATABASE_DIRECTORY / "pca_model.sql",
     )
     write_dataframe_to_sql(
         dataframe = score_frame.reset_index(),
         table_name = "pc_timeseries",
-        output_path = DATABASE_DIRECTORY / "pc_timeseries.sql",
     )
     write_dataframe_to_sql(
         dataframe = rolling_correlation_frame.reset_index(),
         table_name = "rolling_correlations",
-        output_path = DATABASE_DIRECTORY / "rolling_correlations.sql",
     )
 
     # One panel per retained component, plotted one block at a time so a single
