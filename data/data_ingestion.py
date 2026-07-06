@@ -51,9 +51,29 @@ FRED_SERIES_IDENTIFIERS = {
     "vix": "VIXCLS",
 }
 
+# FX basket for the momentum component, developed and emerging pairs against
+# the dollar. FRED quotes some pairs as dollars per currency and others as
+# currency per dollar. The quotes are stored exactly as given here, the
+# direction handling belongs to fx_momentum.py.
+FX_SERIES_IDENTIFIERS = {
+    "gbp_usd": "DEXUSUK",
+    "eur_usd": "DEXUSEU",
+    "aud_usd": "DEXUSAL",
+    "jpy_usd": "DEXJPUS",
+    "chf_usd": "DEXSZUS",
+    "cad_usd": "DEXCAUS",
+    "krw_usd": "DEXKOUS",
+    "cny_usd": "DEXCHUS",
+    "mxn_usd": "DEXMXUS",
+    "brl_usd": "DEXBZUS",
+    "inr_usd": "DEXINUS",
+}
+
 RAW_DATA_DIRECTORY = Path("Data/Input")
 RAW_SERIES_PATH = RAW_DATA_DIRECTORY / "raw_series.parquet"
 WEEKLY_LEVELS_PATH = RAW_DATA_DIRECTORY / "weekly_levels.parquet"
+FX_RAW_SERIES_PATH = RAW_DATA_DIRECTORY / "fx_raw_series.parquet"
+FX_WEEKLY_LEVELS_PATH = RAW_DATA_DIRECTORY / "fx_weekly_levels.parquet"
 
 DATE_COLUMN_NAME = "week_date"
 
@@ -171,13 +191,35 @@ def download_raw_series_frame():
     return pd.concat(long_frames, ignore_index = True)
 
 
-def build_weekly_level_frame(raw_series_frame = None):
+def download_fx_series_frame():
+    """
+    Downloads the FX basket for the momentum component and stacks it into one
+    table, same shape as the macro raw layer.
+
+    INPUTS:
+        * none
+
+    OUTPUTS:
+        * a df with columns series_name, observation_date, value
+    """
+    long_frames = []
+    for series_name, series_identifier in FX_SERIES_IDENTIFIERS.items():
+        print("Downloading " + series_identifier + " from FRED")
+        series_frame = fetch_fred_series(series_identifier = series_identifier)
+        series_frame.insert(0, SERIES_NAME_COLUMN, series_name)
+        long_frames.append(series_frame)
+
+    return pd.concat(long_frames, ignore_index = True)
+
+
+def build_weekly_level_frame(raw_series_frame = None, column_order = None):
     """
     Resamplse the full df to weekly. Different markets have different holidays, so
     short daily gaps are forward filled before the Friday.
 
     INPUTS:
         * raw_series_frame, the long raw table from download_raw_series_frame
+        * column_order, the series order for the output columns
 
     OUTPUTS:
         * a dataframe of weekly levels, one column per series, indexed by date
@@ -190,7 +232,6 @@ def build_weekly_level_frame(raw_series_frame = None):
 
     # pivot orders the columns alphabetically, put them back in the series order
     # the rest of the pipeline expects.
-    column_order = list(FRED_SERIES_IDENTIFIERS) + [GOLD_SERIES_NAME]
     daily_level_frame = daily_level_frame[column_order]
 
     daily_level_frame = daily_level_frame.ffill(limit = FORWARD_FILL_LIMIT_DAYS)
@@ -208,7 +249,8 @@ def main():
 
     OUTPUTS:
         * Data/Input/raw_series.parquet and weekly_levels.parquet
-        * Database/raw_series.sql and Database/weekly_levels.sql
+        * Data/Input/fx_raw_series.parquet and fx_weekly_levels.parquet
+        * Database .sql exports of all four
     """
     # This directory is git ignored, so it may be absent on a fresh clone. The
     # Database directory is created by sql_conversion.py when it writes.
@@ -225,9 +267,29 @@ def main():
         raw_series_frame.to_parquet(RAW_SERIES_PATH, index = False)
         print("Written " + str(RAW_SERIES_PATH))
 
-    weekly_level_frame = build_weekly_level_frame(raw_series_frame = raw_series_frame)
+    weekly_level_frame = build_weekly_level_frame(
+        raw_series_frame = raw_series_frame,
+        column_order = list(FRED_SERIES_IDENTIFIERS) + [GOLD_SERIES_NAME],
+    )
     weekly_level_frame.reset_index().to_parquet(WEEKLY_LEVELS_PATH, index = False)
     print("Written " + str(WEEKLY_LEVELS_PATH))
+
+    # The FX basket is a second raw layer with the same keep and reuse rule.
+    # It feeds fx_momentum.py and momentum.cpp, not the PCA stages.
+    if FX_RAW_SERIES_PATH.exists():
+        print("Keeping existing raw layer " + str(FX_RAW_SERIES_PATH))
+        fx_raw_series_frame = pd.read_parquet(FX_RAW_SERIES_PATH)
+    else:
+        fx_raw_series_frame = download_fx_series_frame()
+        fx_raw_series_frame.to_parquet(FX_RAW_SERIES_PATH, index = False)
+        print("Written " + str(FX_RAW_SERIES_PATH))
+
+    fx_weekly_level_frame = build_weekly_level_frame(
+        raw_series_frame = fx_raw_series_frame,
+        column_order = list(FX_SERIES_IDENTIFIERS),
+    )
+    fx_weekly_level_frame.reset_index().to_parquet(FX_WEEKLY_LEVELS_PATH, index = False)
+    print("Written " + str(FX_WEEKLY_LEVELS_PATH))
 
     write_parquet_to_sql(
         parquet_path = RAW_SERIES_PATH,
@@ -236,6 +298,14 @@ def main():
     write_parquet_to_sql(
         parquet_path = WEEKLY_LEVELS_PATH,
         table_name = "weekly_levels",
+    )
+    write_parquet_to_sql(
+        parquet_path = FX_RAW_SERIES_PATH,
+        table_name = "fx_raw_series",
+    )
+    write_parquet_to_sql(
+        parquet_path = FX_WEEKLY_LEVELS_PATH,
+        table_name = "fx_weekly_levels",
     )
 
 
