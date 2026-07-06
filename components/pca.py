@@ -4,7 +4,7 @@ pca.py fits and eigenvectors the covariance PCA that defines the regime axes.
 It reads from Data/Input/data_ingestion.py, builds the feature matrix, fits 
 the PCA on the window, and projects the full history onto the frozen axes.
 
-Outputs (pca_output/*):
+Outputs:
 
     pca_model.parquet holds the frozen loadings, feature means,
     component variances, feature order and fit date range.
