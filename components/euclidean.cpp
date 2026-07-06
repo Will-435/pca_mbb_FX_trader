@@ -1,33 +1,13 @@
 /*
-euclidean.cpp selects the historic neighbourhood of the current point in
-frozen PC space. The neighbourhood is the regime. There is no predefined
-regime label anywhere, the input is only the current point's coordinates.
+This file finds the neighbourhood of historic regime data 
 
-The program reads the frozen PCA model from pca_model.parquet through DuckDB,
-so no pickle crosses the language boundary. It projects every historic week
-onto the frozen axes, measures plain Euclidean distance to the current point,
-selects the neighbourhood, and writes the members' forward four week returns
-to regime_members.duckdb for bootstrap.py.
+The program reads the frozen PCA model from pca_model.parquet. It projects
+the current regime coordinates (in the form of eignevalues and eigenvectors) and
+finds the euclidean distance (preserves natural feature dominance) to select the 
+neighbourhood, and writes the forward 4 week returns to its outputs.
 
-Why plain Euclidean on unwhitened scores: the PC scores keep their natural
-variance weighting, so distance along a dominant macro direction counts for
-more than distance along a minor one. Whitening the scores or recomputing a
-fresh covariance on live data would erase exactly the drift this step is
-meant to detect. Euclidean distance on frozen unwhitened scores is a frozen
-Mahalanobis distance in feature space.
-
-Working assumption, accepted: drift behaviour inside a neighbourhood is
-consistent, so the members' forward returns are informative about the
-current point's forward return.
-
-Build from the repository root, DuckDB is installed via Homebrew:
-    g++ -std=c++17 components/euclidean.cpp -o euclidean \
-        -I/opt/homebrew/opt/duckdb/include -L/opt/homebrew/opt/duckdb/lib -lduckdb
-
-Usage, run from the repository root after pca.py:
-    ./euclidean <pc_1> <pc_2> <pc_3>
-The number of coordinates must match the component count of the frozen model.
-pca.py prints the newest week's coordinates in exactly this format.
+Whitening, normalising the features by their variance, will force all features
+to contribute equally. This defeats the point of looking at historic patterns.
 */
 
 #include <algorithm>
@@ -50,15 +30,9 @@ const std::string REGIME_MEMBERS_SQL_PATH = "Database/regime_members.sql";
 const std::string DATE_COLUMN_NAME = "week_date";
 const std::string TARGET_COLUMN_NAME = "usd_krw_forward_return_4w";
 
-// TODO: choose the neighbourhood rule, k_nearest or distance_threshold. The
-// choice sets the bootstrap sample size. k_nearest fixes the sample size and
-// lets the radius float, distance_threshold fixes the radius and lets the
-// sample size float. Both are implemented below, this constant picks one.
+// This k will be chosen and optimised in time
 const std::string NEIGHBOURHOOD_RULE = "k_nearest";
 
-// TODO: calibrate both parameters. Overlapping four week returns carry about
-// thirteen independent observations per year, so forty weekly members hold
-// roughly ten independent observations. Do not grow this casually.
 const int NEIGHBOUR_COUNT = 40;
 const double DISTANCE_THRESHOLD = 1.0;
 
@@ -86,12 +60,12 @@ struct FrozenPcaModel {
 
 
 /*
-Runs one query and fails loudly if DuckDB reports a problem. Every read in
-this program goes through this helper so errors carry the failing query.
+Runs one query and returns our error if failed. Every read 
+goes through this function so errors are easy to fix.
 
 INPUTS:
-    * connection, an open DuckDB connection
-    * query_text, the SQL to run
+    * connection - an open DuckDB connection
+    * query_text - the SQL to run
 
 OUTPUTS:
     * the materialised query result
@@ -108,14 +82,14 @@ std::unique_ptr<duckdb::MaterializedQueryResult> run_query(
 
 
 /*
-Reads the frozen PCA model from pca_model.parquet. The file is one flat table
-where record_type marks each row as a loading, a feature mean or something
-else. The feature_order column carries the exact feature ordering that the
-projection depends on. Numeric columns are read as doubles because the flat
-table leaves them blank on rows where they do not apply.
+Reads the frozen PCA model from pca_model.parquet. The file makes a table
+where record_type marks rows as a loading, a feature mean or smth else.
+The feature_order column is the feature contribution order.
+Numeric cols are read as doubles bc the table makea them nan on rows 
+that dont have them.
 
 INPUTS:
-    * connection, an open DuckDB connection
+    * connection (a DuckDB connection)
 
 OUTPUTS:
     * the frozen model with feature names, means and loadings
@@ -165,8 +139,7 @@ FrozenPcaModel load_frozen_pca_model(duckdb::Connection& connection)
 
 
 /*
-Projects one week's feature values onto the frozen axes: subtract the frozen
-means, multiply by the frozen loadings. No whitening.
+Projects one week's feature values onto the frozen axes.
 
 INPUTS:
     * feature_values, one week's features in model feature order
@@ -193,15 +166,13 @@ std::vector<double> project_onto_frozen_axes(const std::vector<double>& feature_
 
 /*
 Loads every historic week that already has a known forward return and puts it
-in frozen PC space. Weeks whose forward return has not happened yet cannot be
-neighbourhood members, so they are filtered out in the query. The date column
-is cast to a plain DATE, parquet otherwise carries it as a timestamp. The
-column order is checked against the model feature order, a silent mismatch
-there would corrupt every projection.
+in frozen PC space. Weeks without forwardreturns are dropped. The date column
+is assigned a plain DATE, parquet makes it timestamp by default. The
+column order is checked before outputting.
 
 INPUTS:
-    * connection, an open DuckDB connection
-    * frozen_model, from load_frozen_pca_model
+    * connection - an open DuckDB connection
+    * frozen_model - from load_frozen_pca_model
 
 OUTPUTS:
     * the list of historic points with scores and forward returns
@@ -250,7 +221,7 @@ std::vector<HistoricPoint> load_historic_points(duckdb::Connection& connection,
 }
 
 
-// Computes plain Euclidean distance between two points in PC space.
+// Computes plain Euclidean distance between two points in the PC codomain
 double compute_euclidean_distance(const std::vector<double>& first_point,
                                   const std::vector<double>& second_point)
 {
@@ -265,7 +236,7 @@ double compute_euclidean_distance(const std::vector<double>& first_point,
 
 /*
 Selects the neighbourhood as the fixed number of nearest historic points.
-Sample size is fixed, radius floats with how crowded the region is.
+Sample size is fixed for now. *** This will be updated later. ***
 
 INPUTS:
     * sorted_points, historic points sorted by ascending distance
@@ -282,9 +253,7 @@ std::vector<HistoricPoint> select_neighbours_by_count(const std::vector<Historic
 
 
 /*
-Selects the neighbourhood as every historic point within the distance
-threshold. Radius is fixed, sample size floats with how crowded the region
-is. The threshold has not been calibrated yet.
+Selects the neighbourhood. Same as above.  *** This will be updated later. ***
 
 INPUTS:
     * sorted_points, historic points sorted by ascending distance
@@ -304,7 +273,7 @@ std::vector<HistoricPoint> select_neighbours_by_threshold(const std::vector<Hist
 }
 
 
-// Builds the shared column list of the regime_members table.
+// Builds the column list of the regime_members.
 std::string build_member_column_list(int component_count)
 {
     std::string column_list = "week_date DATE, distance_to_current_point DOUBLE";
@@ -330,8 +299,7 @@ std::string build_member_value_tuple(const HistoricPoint& member)
 }
 
 
-// Creates the directory that will hold an output file if it does not exist,
-// so a fresh clone with git ignored output folders still writes cleanly.
+// Creates the directory that will hold an output file. This file has been .gitignored.
 void ensure_parent_directory_exists(const std::string& file_path)
 {
     std::filesystem::path parent_directory = std::filesystem::path(file_path).parent_path();
@@ -342,13 +310,11 @@ void ensure_parent_directory_exists(const std::string& file_path)
 
 
 /*
-Writes the neighbourhood members into regime_members.duckdb, the handoff file
-that bootstrap.py reads. The table is replaced on every run, one run means
-one neighbourhood.
+Writes the neighbourhood members into regime_members.duckdb. 
 
 INPUTS:
-    * members, the selected neighbourhood
-    * component_count, sets the pc score columns
+    * members - the selected neighbourhood
+    * component_count - sets the pc score columns
 
 OUTPUTS:
     * the regime_members table in regime_members.duckdb
@@ -367,11 +333,8 @@ void write_regime_members_database(const std::vector<HistoricPoint>& members, in
             "INSERT INTO regime_members VALUES " + build_member_value_tuple(member));
     }
 }
-
-
 /*
-Writes the same members as a MySQL script so the neighbourhood can be
-inspected in MySQL Workbench like every other pipeline artefact.
+Writes the same members as a MySQL script.
 
 INPUTS:
     * members, the selected neighbourhood
@@ -396,9 +359,8 @@ void write_regime_members_sql(const std::vector<HistoricPoint>& members, int com
 
 
 /*
-Reads the current point from the command line, measures its distance to every
-historic week in frozen PC space, selects the neighbourhood under the chosen
-rule and writes the members for bootstrap.py.
+Measures euclidean distance to every historic week in frozen PC space, selects 
+the neighbourhood under the chosen rule and writes the members for bootstrap.py.
 
 INPUTS:
     * one command line argument per PC coordinate of the current point

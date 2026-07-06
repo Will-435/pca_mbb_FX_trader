@@ -4,6 +4,11 @@ venv
 data/input
 .vscode/
 Database/
+
+# Compiled C++ binaries at the repository root, rebuilt from components/*.cpp
+/data_relation
+/euclidean
+/momentum
 components/bootstrap_output/*
 
 components/data_relation_output/*
@@ -14,3 +19,6 @@ components/momentum_output/*
 
 components/pca_output/*
 
+data_relation
+euclidean
+momentum
