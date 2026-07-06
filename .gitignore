@@ -2,3 +2,15 @@
 .DS_Store
 venv
 data/input
+.vscode/
+Database/
+components/bootstrap_output/*
+
+components/data_relation_output/*
+
+components/euclidean_output/*
+
+components/momentum_output/*
+
+components/pca_output/*
+
