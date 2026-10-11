@@ -1,13 +1,10 @@
 """
 bootstrap.py builds the empirical conditional distribution of the forward four
-week USD/KRW return given the current regime.
+week USD/KRW return for the current regime.
 
-It reads the neighbourhood members written by euclidean.cpp and applies a
-moving block bootstrap to their forward returns. Moving block boottstrap maintains
-the autoregression in the data.
-
-The output is the empirical distribution itself in order to protect the tails and
-avoid rebuilding a gaussian.
+It reads the neighbourhood members from euclidean.cpp and applies a moving block
+bootstrap, which keeps the autocorrelation in the returns. The saved output is the
+empirical distribution itself, not its moments, so the tails survive.
 """
 
 import math

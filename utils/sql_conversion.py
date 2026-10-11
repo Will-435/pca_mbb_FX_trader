@@ -1,8 +1,6 @@
 """
-sql_conversion.py turns a dataframe into a MySQL script.
-
-Each call writes one script with a single CREATE TABLE followed by batched
-INSERT statements. The pipeline outputs can be inspected in mySQLworkbench.
+sql_conversion.py turns a dataframe into a MySQL script: one CREATE TABLE and
+batched INSERTs, so any pipeline output can be inspected in MySQL Workbench.
 """
 
 from pathlib import Path

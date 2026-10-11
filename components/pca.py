@@ -1,18 +1,10 @@
 """
-pca.py fits and eigenvectors the covariance PCA that defines the regime axes.
+pca.py fits the covariance PCA that defines the regime axes, freezes it, and
+projects the full history onto the frozen axes.
 
-It reads from Data/Input/data_ingestion.py, builds the feature matrix, fits 
-the PCA on the window, and projects the full history onto the frozen axes.
-
-Outputs:
-
-    pca_model.parquet holds the frozen loadings, feature means,
-    component variances, feature order and fit date range.
-
-    pc_timeseries.png plots the PC score history.
-
-    rolling_correlations.parquet holds the separate correlation tracking. 
-    Exported as a .sql script to Database via utils/sql_conversion.py.
+Reads the weekly levels, builds the feature matrix. Writes pca_model.parquet
+(frozen loadings, means, variances, feature order, fit dates), pc_timeseries.png
+and rolling_correlations.parquet, each also exported to Database as .sql.
 """
 
 import sys
@@ -94,7 +86,7 @@ def load_weekly_level_frame():
     OUTPUTS:
         * a dataframe of weekly levels, one column per series, indexed by date
     """
-    # Quick error catch ---------------------------------------------------
+    # Quick error catch
     if not WEEKLY_LEVELS_PATH.exists():
         raise RuntimeError(
             "Missing " + str(WEEKLY_LEVELS_PATH)

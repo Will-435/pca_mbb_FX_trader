@@ -1,13 +1,12 @@
 /*
-This file finds the neighbourhood of historic regime data 
+euclidean.cpp finds the historic neighbourhood of the current regime.
 
-The program reads the frozen PCA model from pca_model.parquet. It projects
-the current regime coordinates (in the form of eignevalues and eigenvectors) and
-finds the euclidean distance (preserves natural feature dominance) to select the 
-neighbourhood, and writes the forward 4 week returns to its outputs.
+It reads the frozen PCA model from pca_model.parquet, projects every historic week
+onto the frozen axes, and takes the Euclidean distance to the current point to
+select the neighbourhood. The members' forward four week returns are written out.
 
-Whitening, normalising the features by their variance, will force all features
-to contribute equally. This defeats the point of looking at historic patterns.
+The scores are left unwhitened on purpose. Whitening would force every feature to
+weigh equally and erase the natural dominance the neighbourhood relies on.
 */
 
 #include <algorithm>

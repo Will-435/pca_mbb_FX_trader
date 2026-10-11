@@ -1,10 +1,10 @@
 /*
-data_relation.cpp is a diagnostic file. It manually runs PCA to see the Cov and Cor
-between features. If the Corr of Cov matricies are near diagonal, then it will have
-the same number of eigenevctors as features, making PCA redundant.
+data_relation.cpp is a diagnostic. It builds the covariance and correlation
+matrices of the features and their eigenstructure to judge whether PCA helps.
 
-The outputs will tell us if PCA is worth doing. If Corr and Cov matricies have strong
-diaginals, then PCA won't be able to compress features well.
+Strong off diagonal structure means PCA compresses the features well. A near
+diagonal matrix means PCA buys little. It does not fit the production PCA, that
+lives in pca.py.
 */
 
 #include <algorithm>

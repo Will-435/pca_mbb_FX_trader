@@ -1,11 +1,8 @@
 """
-This file does the data handling for momentum.cpp
+fx_momentum.py does the data handling for momentum.cpp.
 
-NOTE - I have manually made all FRED spots to have be USD denominated. Some
-are priced in USD/FX. Ensuring USD is the denominator ensures consistency.
-
-I have taken logs to make the momentum calculation a linear calculation, 
-log(A) - log(B). This simplifies momentum.cpp.
+Every FRED pair is put on a USD denominator so the basket is consistent, then
+logged so momentum is a plain difference, log(A) - log(B), in momentum.cpp.
 """
 
 import sys

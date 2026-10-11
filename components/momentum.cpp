@@ -1,27 +1,15 @@
 /*
 momentum.cpp computes the two week FX momentum with Eigen. This file is only the
-linear algebra computation. Data handling is done in momentum.py.
+linear algebra, the data handling is in fx_momentum.py.
 
-The whole file is only two linear opperation. 
+Two operations, both on log levels:
+    Momentum is a difference of two row blocks, M = L(h..n) - L(1..n-h), which on
+    log levels is the h week log return of each currency against the dollar.
+    The latest cross matrix is an outer difference, C = m 1^T - 1 m^T, so entry
+    (a, b) is the momentum of a priced in b.
 
-    Momentum. With a horizon of h weeks, the momentum matrix is
-    M = L(h..n) - L(1..n-h), a difference of two row blocks. On log levels
-    that subtraction is exactly the h week log return of each currency
-    against the dollar.
-
-    Cross rates. The log price of currency a in terms of currency b is
-    log(a/USD) - log(b/USD), so just the log diff between the two momenta.
-    For the newest week, the full matrix of cross momenta is built as 
-    C = (m 1^T) - (1 m^T), where m is the latest momentum column vector and 1
-    is a vector of all ones.
-
-** I am currently researching for a more indsutry standard approach. **
-** This works for now. **
-
-Outputs, both read back by fx_momentum.py:
-    momentum_2w.parquet - momentum series per currency
-    momentum_cross_latest.parquet - latest cross matrix
-
+Placeholder method, a more standard momentum approach is planned. Outputs
+momentum_2w.parquet and momentum_cross_latest.parquet, both read by fx_momentum.py.
 */
 
 #include <filesystem>

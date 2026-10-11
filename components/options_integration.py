@@ -1,32 +1,15 @@
 """
 options_integration.py combines the empirical bootstrap distribution with a
-forward looking options layer. Future stage, only the baseline load and
-summary run today, the options functions are documented stubs.
+forward looking options layer. Future stage: only the baseline load and summary
+run today, the options functions are documented stubs.
 
-The two layers stay separate and gated, never blended. The bootstrap
-distribution from bootstrap.py is the baseline regime view, built from
-history. The options surface is a live override and tail veto, built from
-forward looking market prices. The layers are compared, and the options layer
-can veto or adjust, but the two are never averaged into one distribution.
+The two layers stay separate and gated, never blended. The bootstrap is the
+baseline regime view from history; the options surface is a live override and tail
+veto from market prices, covering the tails the bootstrap never sampled. The per
+lever mapping and gating live in the function stubs below.
 
-The options to distribution mapping uses three independent levers:
-    * at the money implied volatility, judged against its own history, maps
-      to the scale of the distribution
-    * risk reversal maps to the skew
-    * butterfly maps to the kurtosis and tail weight, not to the variance
-
-Rationale for the bootstrap and options split: the bootstrap can only resample
-tails that already happened inside the conditioning set. The options market
-prices tails that have not happened yet. The options layer therefore covers
-exactly the blind spot of the baseline.
-
-Data source once implemented: the Interactive Brokers TWS API, using implied
-volatility on liquid emerging market currency and dollar index proxies.
-USD/KRW options themselves trade thinly through non deliverable instruments,
-so a proxy surface is the practical route.
-
-Dependencies: pandas, pyarrow.
-Run from the repository root after bootstrap.py: python3 components/options_integration.py
+Options data source once implemented: the Interactive Brokers TWS API on liquid
+emerging market currency and dollar index proxies.
 """
 
 from pathlib import Path

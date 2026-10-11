@@ -1,18 +1,10 @@
 """
-data_ingestion.py pulls the raw daily series and stores them for the rest of
-the pipeline. It is the only file that touches the network.
+data_ingestion.py pulls the raw daily series and saves them for the pipeline. It
+is the only file that touches the network.
 
-It downloads every series (LBMA fix for gold, FRED for everything else), stacks
-them into 1 table, and resamples them into weekly data. Both are saved as parquet.
-The parquet is used to build the SQL export.
-
-Outputs:
-
-    Data/Input/raw_series.parquet - every series stacked. Delete for each new run
-
-    Data/Input/weekly_levels.parquet, This is the file pca.py reads.
-
-    Database/raw_series.sql and Database/weekly_levels.sql, MySQL Workbench imports.
+Gold comes from the LBMA fix, the rest from FRED. Series are stacked, resampled to
+weekly levels, saved as parquet, and exported to Database as .sql. weekly_levels is
+the file pca.py reads.
 """
 
 import os
